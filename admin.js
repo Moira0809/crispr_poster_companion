@@ -16,7 +16,25 @@
   const MD_HINT = 'Empty line = new paragraph. **bold**, *italic*, [link text](https://…)';
   const newMedia = () => ({ type: 'image', src: '', caption: '', alt: '' });
 
-  const TABS = [
+  const METHOD_FIELDS = [
+    T('title', 'Method name'),
+    A('what', 'What we did', { rows: 5, hint: MD_HINT }),
+    A('why', 'Why we used this method', { rows: 4, hint: 'Shown as a highlighted box.' }),
+    { key: 'media', type: 'list', label: 'Images / videos for this method', itemLabel: 'Media', titleKey: 'caption', itemType: 'media', newItem: newMedia }
+  ];
+  const EXP_FIELDS = [
+    T('title', 'Experiment title', { hint: 'Large heading of this section, e.g. "CRISPR-Cas experiment".' }),
+    T('nav', 'Short name', { hint: 'Used in the menu at the top and in this editor tab.', onInput: () => renderTabs() }),
+    { key: 'accent', label: 'Colour of this experiment', type: 'select', options: Site.ACCENTS },
+    A('intro', 'Intro: goal of this experiment', { rows: 4, hint: MD_HINT }),
+    { key: 'methods', type: 'list', label: 'Methods', itemLabel: 'Method', titleKey: 'title',
+      newItem: () => ({ title: 'New method', what: '', why: '', media: [] }), fields: METHOD_FIELDS },
+    T('galleryHeading', 'Gallery heading'),
+    A('galleryIntro', 'Gallery intro text', { rows: 2, hint: MD_HINT }),
+    { key: 'media', type: 'list', label: 'Gallery: images / videos', itemLabel: 'Media', titleKey: 'caption', itemType: 'media', newItem: newMedia }
+  ];
+
+  const TABS_BEFORE = [
     { id: 'intro', label: 'Title & header', lead: 'The first thing people see after scanning the QR code.', fields: [
       T('meta.title', 'Project title'),
       A('meta.subtitle', 'Subtitle / one-sentence summary', { rows: 2 }),
@@ -28,22 +46,9 @@
     { id: 'overview', label: 'Overview', lead: 'Context and motivation that did not fit on the poster.', fields: [
       T('overview.heading', 'Heading'),
       A('overview.body', 'Text', { rows: 10, hint: MD_HINT })
-    ] },
-    { id: 'methods', label: 'Methods', lead: 'Each method shows what you did, why you chose it, and optional images/videos.', fields: [
-      { key: 'methods', type: 'list', itemLabel: 'Method', titleKey: 'title',
-        newItem: () => ({ title: 'New method', what: '', why: '', media: [] }),
-        fields: [
-          T('title', 'Method name'),
-          A('what', 'What we did', { rows: 5, hint: MD_HINT }),
-          A('why', 'Why we used this method', { rows: 4, hint: 'Shown as a highlighted box.' }),
-          { key: 'media', type: 'list', label: 'Images / videos for this method', itemLabel: 'Media', titleKey: 'caption', itemType: 'media', newItem: newMedia }
-        ] }
-    ] },
-    { id: 'results', label: 'Microscopy', lead: 'Gallery of images and videos from your experiments.', fields: [
-      T('results.heading', 'Heading'),
-      A('results.intro', 'Intro text', { rows: 3, hint: MD_HINT }),
-      { key: 'results.media', type: 'list', label: 'Gallery', itemLabel: 'Media', titleKey: 'caption', itemType: 'media', newItem: newMedia }
-    ] },
+    ] }
+  ];
+  const TABS_AFTER = [
     { id: 'team', label: 'About us', lead: 'The authors.', fields: [
       { key: 'authors', type: 'list', itemLabel: 'Author', titleKey: 'name',
         newItem: () => ({ name: 'New author', role: '', affiliation: '', email: '', photo: '', bio: '' }),
@@ -63,25 +68,68 @@
     { id: 'publish', label: 'Publish & QR' }
   ];
 
+  // One tab per experiment, between the general tabs and the team/references tabs.
+  function allTabs() {
+    const exps = (content.experiments || []).map((e, i) => ({
+      id: `exp-${i}`, exp: i, accent: e.accent, label: e.nav || e.title || `Experiment ${i + 1}`
+    }));
+    return [...TABS_BEFORE, ...exps, { id: 'add-exp', label: '+ Experiment' }, ...TABS_AFTER];
+  }
+
   // ---------- Rendering ----------
   function renderTabs() {
-    $('#tabs').innerHTML = TABS.map(t =>
-      `<button role="tab" data-tab="${t.id}" aria-selected="${t.id === currentTab}">${t.label}</button>`).join('');
+    $('#tabs').innerHTML = allTabs().map(t =>
+      `<button role="tab" data-tab="${t.id}" aria-selected="${t.id === currentTab}"${t.accent ? ` class="tab-exp tab-${esc(t.accent)}"` : ''}>${esc(t.label)}</button>`).join('');
   }
   $('#tabs').addEventListener('click', e => {
     const b = e.target.closest('[data-tab]');
-    if (b) { currentTab = b.dataset.tab; renderTabs(); renderPanel(); }
+    if (!b) return;
+    if (b.dataset.tab === 'add-exp') {
+      content.experiments.push(Site.newExperiment());
+      currentTab = `exp-${content.experiments.length - 1}`;
+      changed();
+    } else {
+      currentTab = b.dataset.tab;
+    }
+    renderTabs(); renderPanel();
   });
 
   function renderPanel() {
-    const tab = TABS.find(t => t.id === currentTab);
+    const tab = allTabs().find(t => t.id === currentTab) || (currentTab = 'intro', TABS_BEFORE[0]);
     const panel = $('#panel');
     const y = window.scrollY;
     panel.innerHTML = '';
     if (tab.id === 'publish') { renderPublish(panel); return; }
+    if (tab.exp != null) { renderExperiment(panel, tab.exp); window.scrollTo(0, y); return; }
     panel.insertAdjacentHTML('beforeend', `<h2>${tab.label}</h2><p class="lead">${tab.lead}</p>`);
     renderFields(panel, content, tab.fields);
     window.scrollTo(0, y);
+  }
+
+  function renderExperiment(panel, i) {
+    const exps = content.experiments;
+    const exp = exps[i];
+    panel.insertAdjacentHTML('beforeend', `
+      <div class="card-head"><h2>Experiment ${i + 1}</h2><div class="card-tools">
+        <button class="btn small" data-act="left" ${i === 0 ? 'disabled' : ''}>← Move earlier</button>
+        <button class="btn small" data-act="right" ${i === exps.length - 1 ? 'disabled' : ''}>Move later →</button>
+        <button class="btn small danger" data-act="del">Remove experiment</button></div></div>
+      <p class="lead">This experiment has its own section on the site, with its own methods and microscopy gallery.</p>`);
+    panel.querySelector('.card-tools').addEventListener('click', e => {
+      const act = e.target.closest('[data-act]')?.dataset.act;
+      if (!act) return;
+      if (act === 'del') {
+        if (!confirm(`Remove the whole "${exp.nav || exp.title}" experiment, including all its methods and media?`)) return;
+        exps.splice(i, 1);
+        currentTab = exps.length ? `exp-${Math.max(0, i - 1)}` : 'intro';
+      } else {
+        const j = act === 'left' ? i - 1 : i + 1;
+        [exps[i], exps[j]] = [exps[j], exps[i]];
+        currentTab = `exp-${j}`;
+      }
+      changed(); renderTabs(); renderPanel();
+    });
+    renderFields(panel, exp, EXP_FIELDS);
   }
 
   function renderFields(root, obj, fields) {
@@ -89,8 +137,24 @@
       if (f.type === 'list') renderList(root, obj, f);
       else if (f.type === 'media') root.append(mediaEditor(Site.get(obj, f.key) ?? (Site.set(obj, f.key, newMedia()), Site.get(obj, f.key)), f.label));
       else if (f.type === 'photo') root.append(photoEditor(obj, f));
+      else if (f.type === 'select') root.append(selectField(obj, f));
       else root.append(textField(obj, f));
     }
+  }
+
+  function selectField(obj, f) {
+    const wrap = document.createElement('div');
+    wrap.className = 'field';
+    const id = 'f' + Math.random().toString(36).slice(2);
+    const val = Site.get(obj, f.key);
+    wrap.innerHTML = `<label for="${id}">${f.label}</label><select id="${id}">` +
+      Object.entries(f.options).map(([v, l]) => `<option value="${v}" ${v === val ? 'selected' : ''}>${l}</option>`).join('') +
+      '</select>';
+    wrap.querySelector('select').addEventListener('change', e => {
+      Site.set(obj, f.key, e.target.value);
+      changed(); renderTabs();
+    });
+    return wrap;
   }
 
   function textField(obj, f, onInput) {
@@ -106,6 +170,7 @@
     wrap.querySelector('input,textarea').addEventListener('input', e => {
       Site.set(obj, f.key, e.target.value);
       onInput?.();
+      f.onInput?.();
       changed();
     });
     return wrap;
@@ -267,14 +332,11 @@
 
   function previewContent() {
     const c = structuredClone(content);
-    const swap = m => { if (m && m.src) m.src = resolveSrc(m.src); };
-    swap(c.hero);
-    c.methods?.forEach(m => m.media?.forEach(swap));
-    c.results?.media?.forEach(swap);
-    c.authors?.forEach(a => { if (a.photo) a.photo = resolveSrc(a.photo); });
+    Site.forEachMediaSlot(c, (o, k) => { if (o[k]) o[k] = resolveSrc(o[k]); });
     return c;
   }
   function pushPreview() {
+    if (!content) return;
     $('#preview').contentWindow?.postMessage({ type: 'preview-content', content: previewContent() }, location.origin);
   }
   $('#preview').addEventListener('load', pushPreview);
@@ -330,11 +392,7 @@
 
   function referencedPaths() {
     const set = new Set();
-    const add = s => s && set.add(s);
-    add(content.hero?.src);
-    content.methods?.forEach(m => m.media?.forEach(x => add(x.src)));
-    content.results?.media?.forEach(x => add(x.src));
-    content.authors?.forEach(a => add(a.photo));
+    Site.forEachMediaSlot(content, (o, k) => { if (o[k]) set.add(o[k]); });
     return set;
   }
 
@@ -439,8 +497,8 @@
         const f = await gh('GET', 'content.json');
         if (!f) throw new Error('content.json not found in repo');
         const bin = atob(f.content.replace(/\n/g, ''));
-        content = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0))));
-        Site.clearDraft(); dirty = false; updateStatus(); pushPreview(); toast('Loaded latest content from GitHub.');
+        content = Site.normalize(JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0)))));
+        Site.clearDraft(); dirty = false; updateStatus(); pushPreview(); renderTabs(); toast('Loaded latest content from GitHub.');
       } catch (err) { toast(err.message, true); }
     };
 
@@ -465,12 +523,12 @@
     $('#import-json').onchange = async e => {
       const file = e.target.files[0];
       if (!file) return;
-      try { content = JSON.parse(await file.text()); changed(); toast('Imported.'); }
+      try { content = Site.normalize(JSON.parse(await file.text())); changed(); renderTabs(); renderPanel(); toast('Imported.'); }
       catch { toast('That file is not valid JSON.', true); }
     };
     $('#discard').onclick = async () => {
       if (!confirm('Throw away all unpublished changes and reload the published version?')) return;
-      Site.clearDraft(); pending.clear(); content = await Site.loadPublished(); dirty = false; updateStatus(); pushPreview(); renderPanel();
+      Site.clearDraft(); pending.clear(); content = await Site.loadPublished(); dirty = false; updateStatus(); pushPreview(); renderTabs(); renderPanel();
     };
   }
 

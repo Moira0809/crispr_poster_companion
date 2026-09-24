@@ -34,19 +34,50 @@
 
     $('#overview-body').innerHTML = md(c.overview?.body);
 
-    $('#methods-list').innerHTML = (c.methods || []).map((m, i) => `
-      <li class="method">
-        <div class="method-num">${String(i + 1).padStart(2, '0')}</div>
-        <div class="method-body">
-          <h3>${esc(m.title)}</h3>
-          <div class="prose">${md(m.what)}</div>
-          ${m.why ? `<div class="why"><span class="why-label">Why this method?</span>${md(m.why)}</div>` : ''}
-          ${(m.media || []).length ? `<div class="method-media">${m.media.map(x => mediaHTML(x)).join('')}</div>` : ''}
-        </div>
-      </li>`).join('');
+    const exps = c.experiments || [];
+    const accent = e => (e.accent in Site.ACCENTS ? e.accent : 'gfp');
 
-    $('#results-intro').innerHTML = md(c.results?.intro);
-    $('#gallery').innerHTML = (c.results?.media || []).map(x => mediaHTML(x)).join('');
+    $('#toc').innerHTML = [
+      '<a href="#overview">Overview</a>',
+      ...exps.map((e, i) => `<a class="toc-exp accent-${accent(e)}" href="#${Site.expId(e, i)}">${esc(e.nav || e.title)}</a>`),
+      '<a href="#team">Team</a>',
+      '<a href="#references">References</a>'
+    ].join('');
+
+    $('#exp-cards').innerHTML = exps.length > 1 ? exps.map((e, i) => `
+      <a class="exp-card accent-${accent(e)}" href="#${Site.expId(e, i)}">
+        <span class="exp-kicker">Experiment ${i + 1}</span>
+        <strong>${esc(e.title || e.nav)}</strong>
+        <span class="exp-go">${(e.methods || []).length} methods · go to experiment →</span>
+      </a>`).join('') : '';
+
+    $('#experiments').innerHTML = exps.map((e, i) => `
+      <section id="${Site.expId(e, i)}" class="section experiment accent-${accent(e)}">
+        <div class="wrap">
+          <span class="exp-kicker">Experiment ${i + 1}</span>
+          <h2>${esc(e.title || e.nav)}</h2>
+          <div class="prose">${md(e.intro)}</div>
+
+          ${(e.methods || []).length ? `
+          <h3 class="sub">Methods, and why we used them</h3>
+          <ol class="methods">${e.methods.map((m, j) => `
+            <li class="method">
+              <div class="method-num">${String(j + 1).padStart(2, '0')}</div>
+              <div class="method-body">
+                <h3>${esc(m.title)}</h3>
+                <div class="prose">${md(m.what)}</div>
+                ${m.why ? `<div class="why"><span class="why-label">Why this method?</span>${md(m.why)}</div>` : ''}
+                ${(m.media || []).length ? `<div class="method-media">${m.media.map(x => mediaHTML(x)).join('')}</div>` : ''}
+              </div>
+            </li>`).join('')}
+          </ol>` : ''}
+
+          ${(e.media || []).length || e.galleryIntro ? `
+          <h3 class="sub">${esc(e.galleryHeading || 'From the microscope')}</h3>
+          <div class="prose">${md(e.galleryIntro)}</div>
+          <div class="gallery">${(e.media || []).map(x => mediaHTML(x)).join('')}</div>` : ''}
+        </div>
+      </section>`).join('');
 
     $('#authors').innerHTML = (c.authors || []).map(a => `
       <article class="author">
@@ -81,7 +112,7 @@
 
   // Live updates from the editor's preview iframe
   window.addEventListener('message', e => {
-    if (e.origin === location.origin && e.data?.type === 'preview-content') render(e.data.content);
+    if (e.origin === location.origin && e.data?.type === 'preview-content') render(Site.normalize(e.data.content));
   });
 
   (async () => {

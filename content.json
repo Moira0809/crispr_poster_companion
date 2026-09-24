@@ -1,7 +1,7 @@
 {
   "meta": {
     "title": "Project title goes here",
-    "subtitle": "A one-sentence summary of what we did with CRISPR-Cas and what we found.",
+    "subtitle": "A one-sentence summary of what we did with CRISPR-Cas and optogenetics, and what we found.",
     "badge": "Companion to our poster",
     "course": "Course / Lab name · University of Zurich",
     "date": "2026"
@@ -9,53 +9,92 @@
   "hero": {
     "type": "image",
     "src": "",
-    "caption": "Key image from the experiment (e.g. a representative microscopy frame).",
+    "caption": "Key image from the project (e.g. a representative microscopy frame).",
     "alt": ""
   },
   "overview": {
     "heading": "Why this project?",
-    "body": "Use this section to give the context that did not fit on the poster: the biological question, why it matters, and what we set out to test.\n\nYou can use **bold**, *italic* and [links](https://example.org). Leave an empty line to start a new paragraph."
+    "body": "Use this section to give the context that did not fit on the poster: the biological question, why it matters, and how the two experiments fit together.\n\nYou can use **bold**, *italic* and [links](https://example.org). Leave an empty line to start a new paragraph."
   },
-  "methods": [
+  "experiments": [
     {
-      "title": "Guide RNA design",
-      "what": "What we did: which target, how many guides, which tools were used to design them.",
-      "why": "Why we chose this approach over the alternatives.",
-      "media": []
-    },
-    {
-      "title": "Delivery of Cas9 and gRNA",
-      "what": "What we did: e.g. plasmid, RNP or viral delivery, cell type, conditions.",
-      "why": "Why this delivery method suited our cells and our question.",
-      "media": []
-    },
-    {
-      "title": "Live-cell microscopy",
-      "what": "What we did: microscope, objective, channels, time-lapse interval.",
-      "why": "Why imaging was the right readout for our experiment.",
+      "nav": "CRISPR",
+      "title": "CRISPR-Cas experiment",
+      "accent": "gfp",
+      "intro": "What was the goal of the CRISPR experiment, and what did we edit?",
+      "methods": [
+        {
+          "title": "Guide RNA design",
+          "what": "What we did: which target, how many guides, which tools were used to design them.",
+          "why": "Why we chose this approach over the alternatives.",
+          "media": []
+        },
+        {
+          "title": "Delivery of Cas9 and gRNA",
+          "what": "What we did: e.g. plasmid, RNP or viral delivery, cell type, conditions.",
+          "why": "Why this delivery method suited our cells and our question.",
+          "media": []
+        },
+        {
+          "title": "Microscopy",
+          "what": "What we did: microscope, objective, channels, time-lapse interval.",
+          "why": "Why imaging was the right readout for this experiment.",
+          "media": [
+            { "type": "video", "src": "", "caption": "Time-lapse of … (placeholder)", "alt": "" }
+          ]
+        },
+        {
+          "title": "Image analysis",
+          "what": "What we did: software (e.g. Fiji), segmentation, what we quantified.",
+          "why": "Why these measurements answer our question.",
+          "media": []
+        }
+      ],
+      "galleryHeading": "From the microscope",
+      "galleryIntro": "Images and videos from the CRISPR experiment. Tap an image to enlarge it.",
       "media": [
-        { "type": "video", "src": "", "caption": "Time-lapse of … (placeholder)", "alt": "" }
+        { "type": "video", "src": "", "caption": "Video 1 – placeholder caption.", "alt": "" },
+        { "type": "image", "src": "", "caption": "Figure 1 – placeholder caption.", "alt": "" }
       ]
     },
     {
-      "title": "Image analysis",
-      "what": "What we did: software (e.g. Fiji), segmentation, what we quantified.",
-      "why": "Why these measurements answer our question.",
-      "media": []
+      "nav": "Optogenetics",
+      "title": "Optogenetics experiment",
+      "accent": "magenta",
+      "intro": "What was the goal of the optogenetics experiment, and what did we control with light?",
+      "methods": [
+        {
+          "title": "Light-sensitive construct",
+          "what": "What we did: which optogenetic tool (e.g. channelrhodopsin, a light-inducible dimer), how it was expressed.",
+          "why": "Why this tool was suitable for our question.",
+          "media": []
+        },
+        {
+          "title": "Light stimulation",
+          "what": "What we did: wavelength, intensity, pulse pattern, duration.",
+          "why": "Why we chose these stimulation settings.",
+          "media": []
+        },
+        {
+          "title": "Imaging and readout",
+          "what": "What we did: how the response was recorded and measured.",
+          "why": "Why this readout shows the effect of the light stimulation.",
+          "media": [
+            { "type": "video", "src": "", "caption": "Response to light stimulation (placeholder)", "alt": "" }
+          ]
+        }
+      ],
+      "galleryHeading": "From the microscope",
+      "galleryIntro": "Images and videos from the optogenetics experiment. Tap an image to enlarge it.",
+      "media": [
+        { "type": "video", "src": "", "caption": "Video 1 – placeholder caption.", "alt": "" },
+        { "type": "image", "src": "", "caption": "Figure 1 – placeholder caption.", "alt": "" }
+      ]
     }
   ],
-  "results": {
-    "heading": "From the microscope",
-    "intro": "Additional images and videos from our experiments. Tap an image to enlarge it.",
-    "media": [
-      { "type": "video", "src": "", "caption": "Video 1 – placeholder caption.", "alt": "" },
-      { "type": "image", "src": "", "caption": "Figure 1 – placeholder caption.", "alt": "" },
-      { "type": "image", "src": "", "caption": "Figure 2 – placeholder caption.", "alt": "" }
-    ]
-  },
   "authors": [
-    { "name": "Author One", "role": "Experiments & imaging", "affiliation": "University of Zurich", "email": "", "photo": "", "bio": "" },
-    { "name": "Author Two", "role": "Guide design & analysis", "affiliation": "University of Zurich", "email": "", "photo": "", "bio": "" }
+    { "name": "Moira", "role": "Role in the project", "affiliation": "University of Zurich", "email": "", "photo": "", "bio": "" },
+    { "name": "Lennard", "role": "Role in the project", "affiliation": "University of Zurich", "email": "", "photo": "", "bio": "" }
   ],
   "references": [
     {

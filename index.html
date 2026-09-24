@@ -25,31 +25,17 @@
   </header>
 
   <nav class="toc" aria-label="Sections">
-    <div class="wrap toc-inner">
-      <a href="#overview">Overview</a>
-      <a href="#methods">Methods</a>
-      <a href="#results">Microscopy</a>
-      <a href="#team">Team</a>
-      <a href="#references">References</a>
-    </div>
+    <div class="wrap toc-inner" id="toc"></div>
   </nav>
 
   <main>
     <section id="overview" class="wrap section">
       <h2 data-bind="overview.heading"></h2>
       <div class="prose" id="overview-body"></div>
+      <div class="exp-cards" id="exp-cards"></div>
     </section>
 
-    <section id="methods" class="wrap section">
-      <h2>Methods, and why we used them</h2>
-      <ol class="methods" id="methods-list"></ol>
-    </section>
-
-    <section id="results" class="wrap section">
-      <h2 data-bind="results.heading"></h2>
-      <div class="prose" id="results-intro"></div>
-      <div class="gallery" id="gallery"></div>
-    </section>
+    <div id="experiments"></div>
 
     <section id="team" class="wrap section">
       <h2>About us</h2>

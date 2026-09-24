@@ -7,7 +7,7 @@ index.html        public page (what visitors see)
 admin.html        editor (text, images, videos, authors, references, QR code)
 content.json      ALL text + media paths live here
 media/            images and videos
-assets/           styles and scripts
+*.css, *.js       styles and scripts
 ```
 
 ## Try it locally
