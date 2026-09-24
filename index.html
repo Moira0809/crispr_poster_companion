@@ -14,12 +14,13 @@
 <body>
   <div id="preview-banner" class="preview-banner" hidden>Preview of your unsaved draft. Visitors don't see this version.</div>
 
-  <header class="hero">
+  <header class="hero" id="top">
     <div class="wrap">
       <span class="badge" data-bind="meta.badge"></span>
       <h1 data-bind="meta.title"></h1>
       <p class="subtitle" data-bind="meta.subtitle"></p>
       <p class="course" data-bind="meta.course"></p>
+      <div class="exp-cards" id="exp-cards"></div>
       <figure class="hero-media" id="hero-media"></figure>
     </div>
   </header>
@@ -32,7 +33,6 @@
     <section id="overview" class="wrap section">
       <h2 data-bind="overview.heading"></h2>
       <div class="prose" id="overview-body"></div>
-      <div class="exp-cards" id="exp-cards"></div>
     </section>
 
     <div id="experiments"></div>

@@ -16,7 +16,9 @@
     }
     const alt = esc(m.alt || m.caption || '');
     if (type === 'video') {
-      return `<figure class="media"><video src="${esc(m.src)}" controls playsinline preload="metadata" muted></video>${cap}</figure>`;
+      // "#t=0.1" makes iPhones show the first frame instead of a black box
+      const vsrc = m.src.includes('#') || m.src.startsWith('blob:') ? m.src : `${m.src}#t=0.1`;
+      return `<figure class="media"><video src="${esc(vsrc)}" controls playsinline preload="metadata" muted></video>${cap}</figure>`;
     }
     return `<figure class="media"><button class="zoom" data-src="${esc(m.src)}" data-cap="${esc(m.caption || '')}" aria-label="Enlarge image"><img src="${esc(m.src)}" alt="${alt}" ${eager ? '' : 'loading="lazy"'}></button>${cap}</figure>`;
   }
@@ -30,7 +32,7 @@
     document.title = c.meta?.title || document.title;
 
     const hero = c.hero || {};
-    $('#hero-media').outerHTML = `<div id="hero-media">${(hero.src || hero.caption) ? mediaHTML(hero, { eager: true }) : ''}</div>`;
+    $('#hero-media').outerHTML = `<div id="hero-media">${hero.src ? mediaHTML(hero, { eager: true }) : ''}</div>`;
 
     $('#overview-body').innerHTML = md(c.overview?.body);
 
@@ -48,7 +50,8 @@
       <a class="exp-card accent-${accent(e)}" href="#${Site.expId(e, i)}">
         <span class="exp-kicker">Experiment ${i + 1}</span>
         <strong>${esc(e.title || e.nav)}</strong>
-        <span class="exp-go">${(e.methods || []).length} methods · go to experiment →</span>
+        ${(e.methods || []).length ? `<ul class="exp-methods">${e.methods.map(m => `<li>${esc(m.title)}</li>`).join('')}</ul>` : ''}
+        <span class="exp-go">Explore this experiment →</span>
       </a>`).join('') : '';
 
     $('#experiments').innerHTML = exps.map((e, i) => `
@@ -76,6 +79,11 @@
           <h3 class="sub">${esc(e.galleryHeading || 'From the microscope')}</h3>
           <div class="prose">${md(e.galleryIntro)}</div>
           <div class="gallery">${(e.media || []).map(x => mediaHTML(x)).join('')}</div>` : ''}
+
+          <nav class="exp-next" aria-label="Continue">
+            ${exps[i + 1] ? `<a class="next accent-${accent(exps[i + 1])}" href="#${Site.expId(exps[i + 1], i + 1)}">Next: ${esc(exps[i + 1].title || exps[i + 1].nav)} →</a>` : ''}
+            <a href="#top">↑ Back to top</a>
+          </nav>
         </div>
       </section>`).join('');
 
@@ -95,6 +103,30 @@
 
     $('#refs').innerHTML = (c.references || []).map(r => `
       <li>${inline(r.text)}${r.url ? ` <a class="ref-link" href="${esc(r.url)}" target="_blank" rel="noopener">${esc(r.url.replace(/^https?:\/\/(dx\.)?/, ''))}</a>` : ''}</li>`).join('');
+
+    watchSections();
+  }
+
+  // Highlight the menu chip of the section currently on screen, and keep it visible in the menu.
+  let observer;
+  function watchSections() {
+    observer?.disconnect();
+    const links = [...document.querySelectorAll('#toc a')];
+    const sections = links.map(a => document.querySelector(a.getAttribute('href'))).filter(Boolean);
+    const visible = new Map();
+    observer = new IntersectionObserver(entries => {
+      entries.forEach(en => visible.set(en.target.id, en.isIntersecting));
+      const current = sections.find(s => visible.get(s.id));
+      links.forEach(a => {
+        const on = !!current && a.getAttribute('href') === `#${current.id}`;
+        if (on && !a.classList.contains('active')) {
+          const toc = $('#toc');
+          toc.scrollTo({ left: a.offsetLeft - (toc.clientWidth - a.offsetWidth) / 2 });
+        }
+        a.classList.toggle('active', on);
+      });
+    }, { rootMargin: '-80px 0px -60% 0px' });
+    sections.forEach(s => observer.observe(s));
   }
 
   // Lightbox for images

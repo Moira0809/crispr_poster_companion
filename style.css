@@ -70,11 +70,17 @@ p { margin: 0 0 0.8em; }
   position: sticky; top: 0; z-index: 20; background: rgba(0, 0, 0, 0.82);
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid var(--line);
 }
-.toc-inner { display: flex; gap: 6px; overflow-x: auto; padding-top: 10px; padding-bottom: 10px; scrollbar-width: none; }
+.toc-inner {
+  display: flex; gap: 6px; overflow-x: auto; padding-top: 10px; padding-bottom: 10px; scrollbar-width: none;
+  scroll-behavior: smooth; padding-right: 40px;
+  /* fade on the right hints that the menu can be swiped */
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+          mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+}
 .toc-inner::-webkit-scrollbar { display: none; }
 .toc a {
   flex: none; text-decoration: none; color: var(--ink); font-size: 0.9rem; font-weight: 500;
-  padding: 6px 13px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface);
+  padding: 9px 15px; line-height: 1.25; border: 1px solid var(--line); border-radius: 999px; background: var(--surface);
   transition: border-color 0.15s, color 0.15s, box-shadow 0.15s;
 }
 .toc a:hover, .toc a:active, .toc a:focus-visible {
@@ -120,21 +126,33 @@ p { margin: 0 0 0.8em; }
 }
 .experiment .gallery { margin-top: 1rem; }
 
-.exp-cards { display: grid; gap: 0.8rem; margin-top: 1.4rem; }
+.exp-cards { display: grid; gap: 0.9rem; margin: 0.4rem 0 1.4rem; }
 @media (min-width: 560px) { .exp-cards { grid-template-columns: 1fr 1fr; } }
 .exp-card {
-  display: grid; gap: 4px; text-decoration: none; color: var(--ink); padding: 16px;
+  display: flex; flex-direction: column; gap: 6px; text-decoration: none; color: var(--ink); padding: 18px;
   border: 1px solid var(--x); border-radius: var(--radius);
   background: linear-gradient(135deg, var(--x-soft), transparent 80%);
   box-shadow: 0 0 18px -8px var(--x-glow); transition: box-shadow 0.15s;
 }
 .exp-card:hover, .exp-card:focus-visible { box-shadow: 0 0 24px -4px var(--x-glow); outline: none; }
-.exp-card .exp-kicker { margin-bottom: 0.2rem; justify-self: start; }
-.exp-card strong { font-family: var(--display); font-size: 1.15rem; }
-.exp-go { font-size: 0.85rem; color: var(--x); }
+.exp-card .exp-kicker { align-self: flex-start; }
+.exp-card strong { font-family: var(--display); font-size: 1.35rem; line-height: 1.2; }
+.exp-methods { margin: 2px 0 0; padding-left: 1.1rem; font-size: 0.88rem; color: var(--ink-2); }
+.exp-methods li::marker { color: var(--x); }
+.exp-go { margin-top: auto; padding-top: 6px; font-size: 0.9rem; font-weight: 600; color: var(--x); }
 
 .toc a.toc-exp { border-color: var(--x); color: var(--x); }
 .toc a.toc-exp:hover, .toc a.toc-exp:focus-visible { box-shadow: 0 0 12px var(--x-glow); }
+/* current section, set while scrolling */
+.toc a.active { color: #000; background: var(--gfp); border-color: var(--gfp); }
+.toc a.toc-exp.active { color: #000; background: var(--x); border-color: var(--x); box-shadow: 0 0 14px var(--x-glow); }
+
+.exp-next { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 2rem; }
+.exp-next a {
+  display: inline-flex; align-items: center; min-height: 44px; padding: 10px 16px; border-radius: 999px;
+  text-decoration: none; font-weight: 600; font-size: 0.92rem; border: 1px solid var(--line); color: var(--ink);
+}
+.exp-next a.next { border-color: var(--x); color: var(--x); box-shadow: 0 0 14px -4px var(--x-glow); }
 
 /* Methods */
 .methods { list-style: none; margin: 0; padding: 0; display: grid; gap: 1rem; }
