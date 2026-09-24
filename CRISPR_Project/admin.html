@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Site Editor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/admin.css">
+</head>
+<body>
+  <header class="bar">
+    <div class="bar-title">
+      <strong>Site editor</strong>
+      <span id="status" class="status">Loading…</span>
+    </div>
+    <div class="bar-actions">
+      <a class="btn ghost" href="index.html?preview=1" target="_blank" rel="noopener">Open preview</a>
+      <button class="btn primary" id="btn-publish">Publish</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <div class="editor">
+      <nav class="tabs" id="tabs" role="tablist"></nav>
+      <div id="panel" class="panel"></div>
+    </div>
+    <aside class="preview">
+      <div class="preview-head">Live preview (phone width)</div>
+      <div class="phone"><iframe id="preview" src="index.html?preview=1" title="Live preview"></iframe></div>
+    </aside>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+  <script src="assets/common.js"></script>
+  <script src="assets/admin.js"></script>
+</body>
+</html>
