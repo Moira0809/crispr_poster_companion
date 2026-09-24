@@ -1,0 +1,503 @@
+// Editor for content.json. Edits are kept as a local draft; "Publish" commits
+// new media files and content.json to the GitHub repo that serves the site.
+(function () {
+  const $ = s => document.querySelector(s);
+  const { esc } = Site;
+  const GH_KEY = 'poster-site-github-v1';
+
+  let content = null;
+  let dirty = false;
+  let currentTab = 'intro';
+  const pending = new Map(); // "media/foo.mp4" -> { file, url } — chosen locally, not yet uploaded
+
+  // ---------- Form schema ----------
+  const T = (key, label, extra = {}) => ({ key, label, type: 'text', ...extra });
+  const A = (key, label, extra = {}) => ({ key, label, type: 'textarea', ...extra });
+  const MD_HINT = 'Empty line = new paragraph. **bold**, *italic*, [link text](https://…)';
+  const newMedia = () => ({ type: 'image', src: '', caption: '', alt: '' });
+
+  const TABS = [
+    { id: 'intro', label: 'Title & header', lead: 'The first thing people see after scanning the QR code.', fields: [
+      T('meta.title', 'Project title'),
+      A('meta.subtitle', 'Subtitle / one-sentence summary', { rows: 2 }),
+      T('meta.badge', 'Small label above the title'),
+      T('meta.course', 'Course, lab or institution'),
+      T('meta.date', 'Year / date'),
+      { key: 'hero', label: 'Header image or video (optional)', type: 'media' }
+    ] },
+    { id: 'overview', label: 'Overview', lead: 'Context and motivation that did not fit on the poster.', fields: [
+      T('overview.heading', 'Heading'),
+      A('overview.body', 'Text', { rows: 10, hint: MD_HINT })
+    ] },
+    { id: 'methods', label: 'Methods', lead: 'Each method shows what you did, why you chose it, and optional images/videos.', fields: [
+      { key: 'methods', type: 'list', itemLabel: 'Method', titleKey: 'title',
+        newItem: () => ({ title: 'New method', what: '', why: '', media: [] }),
+        fields: [
+          T('title', 'Method name'),
+          A('what', 'What we did', { rows: 5, hint: MD_HINT }),
+          A('why', 'Why we used this method', { rows: 4, hint: 'Shown as a highlighted box.' }),
+          { key: 'media', type: 'list', label: 'Images / videos for this method', itemLabel: 'Media', titleKey: 'caption', itemType: 'media', newItem: newMedia }
+        ] }
+    ] },
+    { id: 'results', label: 'Microscopy', lead: 'Gallery of images and videos from your experiments.', fields: [
+      T('results.heading', 'Heading'),
+      A('results.intro', 'Intro text', { rows: 3, hint: MD_HINT }),
+      { key: 'results.media', type: 'list', label: 'Gallery', itemLabel: 'Media', titleKey: 'caption', itemType: 'media', newItem: newMedia }
+    ] },
+    { id: 'team', label: 'About us', lead: 'The authors.', fields: [
+      { key: 'authors', type: 'list', itemLabel: 'Author', titleKey: 'name',
+        newItem: () => ({ name: 'New author', role: '', affiliation: '', email: '', photo: '', bio: '' }),
+        fields: [
+          T('name', 'Name'), T('role', 'Role in the project'), T('affiliation', 'Affiliation'),
+          T('email', 'Email (optional, shown publicly)'),
+          { key: 'photo', label: 'Photo (optional; initials are shown otherwise)', type: 'photo' },
+          A('bio', 'Short bio (optional)', { rows: 3 })
+        ] },
+      A('acknowledgements', 'Acknowledgements', { rows: 3, hint: MD_HINT })
+    ] },
+    { id: 'refs', label: 'References', lead: 'Numbered in the order shown.', fields: [
+      { key: 'references', type: 'list', itemLabel: 'Reference', titleKey: 'text',
+        newItem: () => ({ text: '', url: '' }),
+        fields: [A('text', 'Citation', { rows: 3 }), T('url', 'Link / DOI URL (optional)')] }
+    ] },
+    { id: 'publish', label: 'Publish & QR' }
+  ];
+
+  // ---------- Rendering ----------
+  function renderTabs() {
+    $('#tabs').innerHTML = TABS.map(t =>
+      `<button role="tab" data-tab="${t.id}" aria-selected="${t.id === currentTab}">${t.label}</button>`).join('');
+  }
+  $('#tabs').addEventListener('click', e => {
+    const b = e.target.closest('[data-tab]');
+    if (b) { currentTab = b.dataset.tab; renderTabs(); renderPanel(); }
+  });
+
+  function renderPanel() {
+    const tab = TABS.find(t => t.id === currentTab);
+    const panel = $('#panel');
+    const y = window.scrollY;
+    panel.innerHTML = '';
+    if (tab.id === 'publish') { renderPublish(panel); return; }
+    panel.insertAdjacentHTML('beforeend', `<h2>${tab.label}</h2><p class="lead">${tab.lead}</p>`);
+    renderFields(panel, content, tab.fields);
+    window.scrollTo(0, y);
+  }
+
+  function renderFields(root, obj, fields) {
+    for (const f of fields) {
+      if (f.type === 'list') renderList(root, obj, f);
+      else if (f.type === 'media') root.append(mediaEditor(Site.get(obj, f.key) ?? (Site.set(obj, f.key, newMedia()), Site.get(obj, f.key)), f.label));
+      else if (f.type === 'photo') root.append(photoEditor(obj, f));
+      else root.append(textField(obj, f));
+    }
+  }
+
+  function textField(obj, f, onInput) {
+    const wrap = document.createElement('div');
+    wrap.className = 'field';
+    const id = 'f' + Math.random().toString(36).slice(2);
+    const val = Site.get(obj, f.key) ?? '';
+    wrap.innerHTML = `<label for="${id}">${f.label}</label>` +
+      (f.type === 'textarea'
+        ? `<textarea id="${id}" rows="${f.rows || 4}">${esc(val)}</textarea>`
+        : `<input id="${id}" type="text" value="${esc(val)}">`) +
+      (f.hint ? `<span class="hint">${esc(f.hint)}</span>` : '');
+    wrap.querySelector('input,textarea').addEventListener('input', e => {
+      Site.set(obj, f.key, e.target.value);
+      onInput?.();
+      changed();
+    });
+    return wrap;
+  }
+
+  function renderList(root, obj, f) {
+    let arr = Site.get(obj, f.key);
+    if (!Array.isArray(arr)) { arr = []; Site.set(obj, f.key, arr); }
+    if (f.label) root.insertAdjacentHTML('beforeend', `<div class="list-label">${f.label}</div>`);
+
+    arr.forEach((item, i) => {
+      const card = document.createElement('div');
+      card.className = 'card';
+      const title = () => {
+        const t = f.titleKey ? String(item[f.titleKey] || '').trim() : '';
+        return `${f.itemLabel} ${i + 1}${t ? ' · ' + t.slice(0, 60) : ''}`;
+      };
+      card.innerHTML = `<div class="card-head"><strong></strong><div class="card-tools">
+        <button class="btn small" data-act="up" ${i === 0 ? 'disabled' : ''} aria-label="Move up">↑</button>
+        <button class="btn small" data-act="down" ${i === arr.length - 1 ? 'disabled' : ''} aria-label="Move down">↓</button>
+        <button class="btn small danger" data-act="del">Remove</button></div></div>`;
+      const head = card.querySelector('strong');
+      head.textContent = title();
+      card.querySelector('.card-tools').addEventListener('click', e => {
+        const act = e.target.closest('[data-act]')?.dataset.act;
+        if (!act) return;
+        if (act === 'del' && !confirm(`Remove ${title()}?`)) return;
+        if (act === 'del') arr.splice(i, 1);
+        if (act === 'up') [arr[i - 1], arr[i]] = [arr[i], arr[i - 1]];
+        if (act === 'down') [arr[i + 1], arr[i]] = [arr[i], arr[i + 1]];
+        changed(); renderPanel();
+      });
+
+      if (f.itemType === 'media') {
+        card.append(mediaEditor(item, null, () => { head.textContent = title(); }));
+      } else {
+        for (const sub of f.fields) {
+          if (sub.type === 'list') renderList(card, item, sub);
+          else if (sub.type === 'photo') card.append(photoEditor(item, sub));
+          else card.append(textField(item, sub, () => { head.textContent = title(); }));
+        }
+      }
+      root.append(card);
+    });
+
+    const add = document.createElement('button');
+    add.className = 'btn';
+    add.textContent = `+ Add ${f.itemLabel.toLowerCase()}`;
+    add.addEventListener('click', () => { arr.push(f.newItem()); changed(); renderPanel(); });
+    const addWrap = document.createElement('div');
+    addWrap.style.marginBottom = '18px';
+    addWrap.append(add);
+    root.append(addWrap);
+  }
+
+  function resolveSrc(src) {
+    return pending.get(src)?.url || src;
+  }
+
+  function thumbHTML(type, src) {
+    if (!src) return `<div class="thumb">No file yet</div>`;
+    const s = esc(resolveSrc(src));
+    return `<div class="thumb">${type === 'video' ? `<video src="${s}" muted preload="metadata"></video>` : `<img src="${s}" alt="">`}</div>`;
+  }
+
+  function mediaEditor(m, label, onTitle) {
+    const box = document.createElement('div');
+    box.className = label ? 'field' : '';
+    const render = () => {
+      box.innerHTML = `${label ? `<label>${label}</label>` : ''}
+        <div class="media-row">
+          ${thumbHTML(Site.mediaType(m), m.src)}
+          <div>
+            <div class="inline" style="margin-bottom:8px">
+              <select data-k="type" aria-label="Media type">
+                <option value="image" ${m.type !== 'video' ? 'selected' : ''}>Image</option>
+                <option value="video" ${m.type === 'video' ? 'selected' : ''}>Video</option>
+              </select>
+              <label class="btn small upload-label">Choose file…<input type="file" accept="image/*,video/mp4,video/webm,video/quicktime"></label>
+              ${m.src ? '<button class="btn small danger" data-clear>Clear</button>' : ''}
+            </div>
+            <div class="field"><input type="text" data-k="src" value="${esc(m.src)}" placeholder="media/filename.mp4 (empty = placeholder)" aria-label="File path"></div>
+            <div class="field"><input type="text" data-k="caption" value="${esc(m.caption)}" placeholder="Caption" aria-label="Caption"></div>
+            <div class="field"><input type="text" data-k="alt" value="${esc(m.alt)}" placeholder="Short description for screen readers (optional)" aria-label="Alt text"></div>
+            ${pending.has(m.src) ? '<span class="hint">⏳ New file. It will upload when you publish.</span>' : ''}
+          </div>
+        </div>`;
+      box.querySelectorAll('[data-k]').forEach(el => el.addEventListener(el.tagName === 'SELECT' || el.dataset.k === 'src' ? 'change' : 'input', () => {
+        m[el.dataset.k] = el.value;
+        if (el.dataset.k === 'caption') onTitle?.();
+        if (el.dataset.k !== 'caption' && el.dataset.k !== 'alt') { changed(); render(); } else changed();
+      }));
+      box.querySelector('[data-clear]')?.addEventListener('click', () => { m.src = ''; changed(); render(); });
+      box.querySelector('input[type=file]').addEventListener('change', e => {
+        const file = e.target.files[0];
+        if (!file) return;
+        m.src = addPendingFile(file);
+        m.type = file.type.startsWith('video') || Site.isVideo(file.name) ? 'video' : 'image';
+        changed(); render();
+      });
+    };
+    render();
+    return box;
+  }
+
+  function photoEditor(obj, f) {
+    const box = document.createElement('div');
+    box.className = 'field';
+    const render = () => {
+      const src = obj[f.key] || '';
+      box.innerHTML = `<label>${f.label}</label><div class="media-row">${thumbHTML('image', src)}
+        <div><div class="inline" style="margin-bottom:8px">
+          <label class="btn small upload-label">Choose photo…<input type="file" accept="image/*"></label>
+          ${src ? '<button class="btn small danger" data-clear>Clear</button>' : ''}</div>
+          <input type="text" value="${esc(src)}" placeholder="media/photo.jpg" aria-label="Photo path"></div></div>`;
+      box.querySelector('input[type=text]').addEventListener('change', e => { obj[f.key] = e.target.value; changed(); render(); });
+      box.querySelector('[data-clear]')?.addEventListener('click', () => { obj[f.key] = ''; changed(); render(); });
+      box.querySelector('input[type=file]').addEventListener('change', e => {
+        const file = e.target.files[0];
+        if (file) { obj[f.key] = addPendingFile(file); changed(); render(); }
+      });
+    };
+    render();
+    return box;
+  }
+
+  function addPendingFile(file) {
+    const isVid = file.type.startsWith('video');
+    const mb = file.size / 1048576;
+    if (isVid && mb > 25) toast(`That video is ${mb.toFixed(0)} MB. Consider compressing it to under ~20 MB so it loads on mobile data.`, true);
+    else if (!isVid && mb > 3) toast(`That image is ${mb.toFixed(1)} MB. Consider resizing it (≈2000 px wide is plenty).`, true);
+    if (/\.(mov)$/i.test(file.name)) toast('.mov files often do not play on Android. Export as .mp4 (H.264) if possible.', true);
+    const clean = file.name.toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/-+/g, '-');
+    let path = `media/${clean}`;
+    if (pending.has(path)) path = `media/${Date.now()}-${clean}`;
+    pending.set(path, { file, url: URL.createObjectURL(file) });
+    return path;
+  }
+
+  // ---------- Draft, status, preview ----------
+  let saveTimer, previewTimer;
+  function changed() {
+    dirty = true;
+    updateStatus();
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => Site.writeDraft(content), 300);
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(pushPreview, 250);
+  }
+
+  function updateStatus() {
+    const el = $('#status');
+    const n = pending.size;
+    el.textContent = dirty
+      ? `Unpublished changes${n ? ` · ${n} file${n > 1 ? 's' : ''} to upload` : ''} (saved as a draft in this browser)`
+      : 'Up to date with the published site';
+    el.classList.toggle('dirty', dirty);
+  }
+
+  function previewContent() {
+    const c = structuredClone(content);
+    const swap = m => { if (m && m.src) m.src = resolveSrc(m.src); };
+    swap(c.hero);
+    c.methods?.forEach(m => m.media?.forEach(swap));
+    c.results?.media?.forEach(swap);
+    c.authors?.forEach(a => { if (a.photo) a.photo = resolveSrc(a.photo); });
+    return c;
+  }
+  function pushPreview() {
+    $('#preview').contentWindow?.postMessage({ type: 'preview-content', content: previewContent() }, location.origin);
+  }
+  $('#preview').addEventListener('load', pushPreview);
+
+  window.addEventListener('beforeunload', e => {
+    if (pending.size) { e.preventDefault(); e.returnValue = ''; }
+  });
+
+  // ---------- GitHub ----------
+  function ghSettings() {
+    try { return JSON.parse(localStorage.getItem(GH_KEY)) || {}; } catch { return {}; }
+  }
+  function saveGhSettings(s) {
+    try { localStorage.setItem(GH_KEY, JSON.stringify(s)); } catch {}
+  }
+  function ghReady(s = ghSettings()) { return s.owner && s.repo && s.token; }
+
+  async function gh(method, path, body) {
+    const s = ghSettings();
+    const branch = s.branch || 'main';
+    const url = `https://api.github.com/repos/${encodeURIComponent(s.owner)}/${encodeURIComponent(s.repo)}/contents/${path}` +
+      (method === 'GET' ? `?ref=${encodeURIComponent(branch)}` : '');
+    const r = await fetch(url, {
+      method,
+      headers: { Authorization: `Bearer ${s.token}`, Accept: 'application/vnd.github+json' },
+      body: body ? JSON.stringify({ ...body, branch }) : undefined
+    });
+    if (method === 'GET' && r.status === 404) return null;
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(`GitHub ${r.status}: ${data.message || r.statusText}`);
+    return data;
+  }
+
+  async function ghPut(path, base64, message) {
+    const existing = await gh('GET', path);
+    return gh('PUT', path, { message, content: base64, sha: existing?.sha });
+  }
+
+  function textToBase64(str) {
+    const bytes = new TextEncoder().encode(str);
+    let bin = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return btoa(bin);
+  }
+  function fileToBase64(file) {
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(String(r.result).split(',')[1]);
+      r.onerror = () => rej(r.error);
+      r.readAsDataURL(file);
+    });
+  }
+
+  function referencedPaths() {
+    const set = new Set();
+    const add = s => s && set.add(s);
+    add(content.hero?.src);
+    content.methods?.forEach(m => m.media?.forEach(x => add(x.src)));
+    content.results?.media?.forEach(x => add(x.src));
+    content.authors?.forEach(a => add(a.photo));
+    return set;
+  }
+
+  async function publish() {
+    if (!ghReady()) {
+      currentTab = 'publish'; renderTabs(); renderPanel();
+      toast('Connect your GitHub repository first (see below).', true);
+      return;
+    }
+    const btn = $('#btn-publish');
+    btn.disabled = true;
+    try {
+      const used = referencedPaths();
+      const files = [...pending].filter(([p]) => used.has(p));
+      let i = 0;
+      for (const [path, { file }] of files) {
+        toast(`Uploading ${++i}/${files.length}: ${path}…`);
+        await ghPut(path, await fileToBase64(file), `Add ${path}`);
+      }
+      toast('Saving text…');
+      await ghPut('content.json', textToBase64(JSON.stringify(content, null, 2) + '\n'), 'Update site content');
+      pending.forEach(p => URL.revokeObjectURL(p.url));
+      pending.clear();
+      Site.clearDraft();
+      dirty = false;
+      updateStatus();
+      renderPanel();
+      toast('Published ✓. The live site updates in about 1 minute.');
+    } catch (err) {
+      toast(`Publishing failed: ${err.message}`, true);
+    } finally {
+      btn.disabled = false;
+    }
+  }
+  $('#btn-publish').addEventListener('click', publish);
+
+  // ---------- Publish tab ----------
+  function siteUrl(s) {
+    if (s.siteUrl) return s.siteUrl;
+    if (location.hostname.endsWith('github.io')) return location.href.replace(/admin\.html.*$/, '');
+    if (s.owner && s.repo) {
+      const o = s.owner.toLowerCase();
+      return s.repo.toLowerCase() === `${o}.github.io` ? `https://${o}.github.io/` : `https://${o}.github.io/${s.repo}/`;
+    }
+    return '';
+  }
+
+  function renderPublish(panel) {
+    const s = ghSettings();
+    panel.innerHTML = `
+      <h2>Publish &amp; QR code</h2>
+      <p class="lead">Your edits are saved as a draft in this browser only. Click <b>Publish</b> to put them online for everyone.</p>
+      ${pending.size ? `<div class="note warn">${pending.size} new file(s) are waiting to upload. They are only kept while this tab is open, so publish before closing it.</div>` : ''}
+
+      <div class="card">
+        <div class="card-head"><strong>GitHub connection</strong><span class="hint">${ghReady(s) ? '✓ configured' : 'not configured'}</span></div>
+        <div class="field"><label for="gh-owner">GitHub user or organisation</label><input id="gh-owner" type="text" value="${esc(s.owner || '')}" placeholder="e.g. crispr-team"></div>
+        <div class="field"><label for="gh-repo">Repository name</label><input id="gh-repo" type="text" value="${esc(s.repo || '')}" placeholder="e.g. poster-site"></div>
+        <div class="field"><label for="gh-branch">Branch</label><input id="gh-branch" type="text" value="${esc(s.branch || 'main')}"></div>
+        <div class="field"><label for="gh-token">Access token</label><input id="gh-token" type="password" value="${esc(s.token || '')}" autocomplete="off">
+          <span class="hint">A fine-grained token with <b>Contents: read &amp; write</b> access to this one repository. Each editor creates their own. It's stored only in this browser. Don't use this on a shared computer.</span></div>
+        <div class="inline">
+          <button class="btn primary" id="gh-save">Save connection</button>
+          <button class="btn" id="gh-test">Test connection</button>
+          <button class="btn" id="gh-pull">Load latest from GitHub</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><strong>QR code for the poster</strong></div>
+        <div class="field"><label for="site-url">Public site URL</label><input id="site-url" type="text" value="${esc(siteUrl(s))}" placeholder="https://user.github.io/repo/"></div>
+        <div class="qr"><div class="qr-box" id="qr-box"><span class="hint">Enter URL</span></div>
+          <div><p class="hint" style="margin-top:0">Print it at least 2.5 cm wide. Test it with a few phones before printing the poster.</p>
+          <button class="btn" id="qr-dl">Download QR (PNG)</button></div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><strong>Backup &amp; manual mode</strong></div>
+        <p class="hint" style="margin-top:0">If you don't use the GitHub connection, download <code>content.json</code> and put it (plus your files in <code>media/</code>) into the site folder yourself.</p>
+        <div class="inline">
+          <button class="btn" id="dl-json">Download content.json</button>
+          <label class="btn upload-label">Import content.json…<input type="file" id="import-json" accept="application/json,.json"></label>
+          <button class="btn danger" id="discard">Discard draft</button>
+        </div>
+      </div>`;
+
+    const readForm = () => ({
+      owner: $('#gh-owner').value.trim(), repo: $('#gh-repo').value.trim(),
+      branch: $('#gh-branch').value.trim() || 'main', token: $('#gh-token').value.trim(),
+      siteUrl: ghSettings().siteUrl
+    });
+    $('#gh-save').onclick = () => { saveGhSettings(readForm()); toast('Connection saved in this browser.'); renderPanel(); };
+    $('#gh-test').onclick = async () => {
+      saveGhSettings(readForm());
+      try { const f = await gh('GET', 'content.json'); toast(f ? '✓ Connected. content.json found.' : 'Connected, but content.json is not in the repo yet.'); }
+      catch (err) { toast(err.message, true); }
+    };
+    $('#gh-pull').onclick = async () => {
+      if (dirty && !confirm('Replace your unpublished draft with the latest version from GitHub?')) return;
+      try {
+        saveGhSettings(readForm());
+        const f = await gh('GET', 'content.json');
+        if (!f) throw new Error('content.json not found in repo');
+        const bin = atob(f.content.replace(/\n/g, ''));
+        content = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, c => c.charCodeAt(0))));
+        Site.clearDraft(); dirty = false; updateStatus(); pushPreview(); toast('Loaded latest content from GitHub.');
+      } catch (err) { toast(err.message, true); }
+    };
+
+    const drawQR = () => {
+      const url = $('#site-url').value.trim();
+      const box = $('#qr-box');
+      if (!url || typeof qrcode === 'undefined') { box.innerHTML = '<span class="hint">Enter URL</span>'; return null; }
+      const qr = qrcode(0, 'M');
+      qr.addData(url); qr.make();
+      const data = qr.createDataURL(10, 4);
+      box.innerHTML = `<img src="${data}" alt="QR code for ${esc(url)}">`;
+      return data;
+    };
+    $('#site-url').addEventListener('input', () => { saveGhSettings({ ...ghSettings(), siteUrl: $('#site-url').value.trim() }); drawQR(); });
+    drawQR();
+    $('#qr-dl').onclick = () => { const d = drawQR(); if (d) download('poster-qr.png', d); };
+
+    $('#dl-json').onclick = () => {
+      const blob = new Blob([JSON.stringify(content, null, 2) + '\n'], { type: 'application/json' });
+      const u = URL.createObjectURL(blob); download('content.json', u); setTimeout(() => URL.revokeObjectURL(u), 1000);
+    };
+    $('#import-json').onchange = async e => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try { content = JSON.parse(await file.text()); changed(); toast('Imported.'); }
+      catch { toast('That file is not valid JSON.', true); }
+    };
+    $('#discard').onclick = async () => {
+      if (!confirm('Throw away all unpublished changes and reload the published version?')) return;
+      Site.clearDraft(); pending.clear(); content = await Site.loadPublished(); dirty = false; updateStatus(); pushPreview(); renderPanel();
+    };
+  }
+
+  function download(name, href) {
+    const a = document.createElement('a');
+    a.href = href; a.download = name; document.body.append(a); a.click(); a.remove();
+  }
+
+  let toastTimer;
+  function toast(msg, isError = false) {
+    const t = $('#toast');
+    t.textContent = msg;
+    t.className = `toast show${isError ? ' error' : ''}`;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { t.className = 'toast'; }, isError ? 6000 : 3500);
+  }
+
+  // ---------- Boot ----------
+  (async () => {
+    const draft = Site.readDraft();
+    try {
+      content = draft || await Site.loadPublished();
+      dirty = !!draft;
+    } catch (err) {
+      $('#panel').innerHTML = `<p>Could not load content.json (${esc(err.message)}). Serve the folder with a local web server (see README).</p>`;
+      return;
+    }
+    renderTabs(); renderPanel(); updateStatus(); pushPreview();
+  })();
+})();
